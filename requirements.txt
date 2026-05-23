@@ -1,3 +1,5 @@
 commonregex-improved==1.0.2
-detoxify
-torch
+onnxruntime
+transformers
+tokenizers
+numpy

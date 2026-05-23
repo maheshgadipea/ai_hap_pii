@@ -44,15 +44,26 @@ Detect and mask PII (Personally Identifiable Information) and detect HAP (Hate, 
 
 ## Setup
 
-**Requirements:** Docker
+**Requirements:** Docker, [HuggingFace CLI](https://huggingface.co/docs/huggingface_hub/guides/cli)
+
+### 1. Clone the repo
 
 ```bash
 git clone https://github.com/yourusername/ai_hap_pii.git
 cd ai_hap_pii
-docker build -t pii-hap-detector .
 ```
 
-> Note: The build downloads PyTorch and the toxic-bert model weights (~1.5 GB). This happens once at build time so runs are instant.
+### 2. Download the toxic-bert ONNX model
+
+```bash
+hf download Xenova/toxic-bert --local-dir ./models/models/toxic-bert-onnx
+```
+
+### 3. Build the Docker image
+
+```bash
+docker build -t pii-hap-detector .
+```
 
 ---
 

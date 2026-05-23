@@ -1,32 +1,66 @@
-"""HAP (Hate, Abuse, Profanity) detection using toxic-bert via detoxify."""
+"""HAP (Hate, Abuse, Profanity) detection using local toxic-bert ONNX model."""
 
-import logging
-import warnings
 import os
+import numpy as np
+import onnxruntime as ort
+from transformers import AutoTokenizer
 
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
-os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-logging.getLogger("transformers").setLevel(logging.ERROR)
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-warnings.filterwarnings("ignore")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-from detoxify import Detoxify
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "models", "models", "toxic-bert-onnx")
+ONNX_PATH = os.path.join(MODEL_DIR, "onnx", "model.onnx")
 
-_model = None
+LABELS = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
+
+_session: ort.InferenceSession | None = None
+_tokenizer: AutoTokenizer | None = None
 
 
-def get_model() -> Detoxify:
-    global _model
-    if _model is None:
-        _model = Detoxify("original")
-    return _model
+def _sigmoid(x: np.ndarray) -> np.ndarray:
+    return 1 / (1 + np.exp(-x))
+
+
+def _get_session() -> ort.InferenceSession:
+    global _session
+    if _session is None:
+        opts = ort.SessionOptions()
+        opts.log_severity_level = 3  # suppress INFO/WARNING, show ERROR only
+        _session = ort.InferenceSession(ONNX_PATH, sess_options=opts)
+    return _session
+
+
+def _get_tokenizer() -> AutoTokenizer:
+    global _tokenizer
+    if _tokenizer is None:
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+    return _tokenizer
 
 
 def analyze(text: str, threshold: float = 0.5) -> dict:
-    scores = {k: float(v) for k, v in get_model().predict(text).items()}
-    flagged = {k: v for k, v in scores.items() if v >= threshold}
+    tokenizer = _get_tokenizer()
+    session = _get_session()
+
+    encoded = tokenizer(
+        text,
+        return_tensors="np",
+        truncation=True,
+        max_length=512,
+        padding=True,
+    )
+
+    # Only pass inputs the model actually expects
+    expected_inputs = {inp.name for inp in session.get_inputs()}
+    ort_inputs = {k: v for k, v in encoded.items() if k in expected_inputs}
+
+    logits = session.run(None, ort_inputs)[0]
+    scores = _sigmoid(logits[0])
+
+    result = {label: float(score) for label, score in zip(LABELS, scores)}
+    flagged = {k: v for k, v in result.items() if v >= threshold}
+
     return {
-        "scores": scores,
+        "scores": result,
         "flagged": flagged,
         "is_hap": len(flagged) > 0,
     }
