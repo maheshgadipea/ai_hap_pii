@@ -57,6 +57,9 @@ cd ai_hap_pii
 
 ```bash
 hf download Xenova/toxic-bert --local-dir ./models/models/toxic-bert-onnx
+
+# or download from following website
+# https://huggingface.co/Xenova/toxic-bert/tree/main
 ```
 
 ### 3. Build the Docker image
